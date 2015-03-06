@@ -2,6 +2,7 @@
 
 from math import exp
 from math import tanh
+from math import sin
 import random
 
 def sign(x):
@@ -27,7 +28,7 @@ def argmax(list):
     return current_max_index
 
 class NeuralNet(object):
-    scale = 0.8
+    scale = 0.1
 
     def __init__(self, input_nodes=[], number_of_hidden=1, number_of_output=1):
         self.set_input_nodes(input_nodes)
@@ -57,8 +58,7 @@ class NeuralNet(object):
         output_errors = [0.0 for k in range(len(self.output_nodes))]
         for k in range(len(self.output_nodes)):
             error = target_output[k] - self.output_nodes[k]
-            #output_errors[k] = error
-            output_errors[k] = dtanh(self.output_nodes[k]) * error
+            output_errors[k] = self.d_activate_output(self.output_nodes[k], error)
 
         return output_errors
 
@@ -70,10 +70,15 @@ class NeuralNet(object):
             error = 0.0
             for k in range(len(self.output_nodes)):
                 error += output_errors[k] * self.output_weights[j][k]
-            #hidden_errors[j] = error
-            hidden_errors[j] = dtanh(self.hidden_nodes[j]) * error
+            hidden_errors[j] = self.d_activate_hidden(self.hidden_nodes[j], error)
 
         return hidden_errors
+
+    def d_activate_output(self, output_value, error):
+        return dtanh(output_value) * error
+
+    def d_activate_hidden(self, hidden_value, error):
+        return dtanh(hidden_value) * error
 
     def update_output_weights(self, output_errors):
         for j in range(len(self.hidden_nodes)):
@@ -99,17 +104,23 @@ class NeuralNet(object):
 
         #隠しノードの更新 定数項を更新しないように-1する
         for j in range(len(self.hidden_nodes) - 1):
-            sum = 0
+            sum_of_values = 0
             for i in range(len(self.input_nodes)):
-                 sum += self.input_nodes[i] * self.input_weights[i][j]
-            self.hidden_nodes[j] = tanh(sum)
+                 sum_of_values += self.input_nodes[i] * self.input_weights[i][j]
+            self.hidden_nodes[j] = self.activate_hidden(sum_of_values)
 
         #出力ノードの更新
         for k in range(len(self.output_nodes)):
-            sum = 0
+            sum_of_values = 0
             for j in range(len(self.hidden_nodes)):
-                 sum += self.hidden_nodes[j] * self.output_weights[j][k]
-            self.output_nodes[k] = tanh(sum)
+                 sum_of_values += self.hidden_nodes[j] * self.output_weights[j][k]
+            self.output_nodes[k] = self.activate_output(sum_of_values)
+
+    def activate_hidden(self, x):
+        return tanh(x)
+
+    def activate_output(self, x):
+        return tanh(x)
 
     def train(self, target_output=[], input_nodes=[]):
         # 入力の指定があればノードを上書き
@@ -149,16 +160,43 @@ class TwoClassNeuralNet(NeuralNet):
 
         return sign(self.output_nodes[0])
 
+#関数近似用ニューラルネットワーク
+class FunctionNeuralNet(NeuralNet):
+    def __init__(self, input_nodes=[], number_of_hidden=1):
+        super(FunctionNeuralNet, self).__init__(input_nodes, number_of_hidden, 1)
+
+    def d_activate_output(self, output_value, error):
+        return error
+
+    def d_activate_hidden(self, hidden_value, error):
+        return dtanh(hidden_value) * error
+
+    #関数近似の際の隠れ層活性化関数はtanh
+    def activate_hidden(self, x):
+        return tanh(x)
+
+    #関数近似の際の出力活性化関数は線形関数
+    def activate_output(self, x):
+        return x
+
+    def classify(self, input_nodes=[]):
+        """inputノードからフィードフォワードして結果を推測"""
+
+        # 入力の指定があればノードを上書き
+        if input_nodes != []: self.set_input_nodes(input_nodes)
+        self.feed_forward()
+
+        return self.output_nodes[0]
 
 if __name__ == "__main__":
-    """
     nn = TwoClassNeuralNet([0.0, 0.0], 3)
 
+    """
     cases = []
     cases.append(([-1.0], [0.0, 0.0]))
     cases.append(([1.0], [1.0, 0.0]))
     cases.append(([1.0], [0.0, 1.0]))
-    cases.append(([1.0], [1.0, 1.0]))
+    cases.append(([-1.0], [1.0, 1.0]))
 
     nn.train_cases(cases, 1000)
 
@@ -166,31 +204,25 @@ if __name__ == "__main__":
     print nn.classify([1.0, 0.0])
     print nn.classify([0.0, 1.0])
     print nn.classify([1.0, 1.0])
+
     """
-
-    nn = TwoClassNeuralNet([0.0, 0.0], 2)
+    nn = FunctionNeuralNet([0.0], 3)
+    pi = 3.14
     cases = []
-    cases.append(([1.0], [1.0, 0.0]))
-    cases.append(([1.0], [0.5, 0.2]))
-    cases.append(([1.0], [0.3, 0.2]))
-    cases.append(([1.0], [0.5, 0.4]))
-    cases.append(([1.0], [0.7, 0.5]))
-    cases.append(([1.0], [0.3, 0.1]))
-    cases.append(([-1.0], [0.0, 1.0]))
-    cases.append(([-1.0], [0.5, 0.8]))
-    cases.append(([-1.0], [0.7, 0.9]))
-    cases.append(([-1.0], [0.4, 0.5]))
-    cases.append(([-1.0], [0.5, 0.7]))
-    cases.append(([-1.0], [0.1, 0.3]))
+    for i in range(70):
+        x = (i / 70.0) * 2 * pi
+        cases.append(([sin(x)], [x]))
+        #print str(x) + ":" + str(sin(x))
 
-    nn.train_cases(cases, 1000)
+    nn.train_cases(cases, 2000)
 
-    print nn.classify([1.0, 0.0])
-    print nn.classify([1.0, 0.3])
-    print nn.classify([0.5, 0.1])
-    print nn.classify([0.3, 0.1])
-    print nn.classify([0.5, 0.4])
-
-    print nn.classify([0.5, 0.6])
-    print nn.classify([0.0, 1.0])
-    print nn.classify([0.4, 0.5])
+    print nn.classify([0.0])
+    print nn.classify([pi / 6])
+    print nn.classify([pi / 2])
+    print nn.classify([pi])
+    print nn.classify([pi * 7 / 6])
+    print nn.classify([pi * 3 / 2])
+    print nn.classify([pi * 2])
+    print nn.classify([pi * -3 / 2])
+    print nn.classify([pi * 5 / 2])
+    print nn.classify([pi * 5])
